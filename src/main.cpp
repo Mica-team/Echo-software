@@ -1,14 +1,37 @@
 #include <Arduino.h>
-#include "ota.h"
+
+#include "BluetoothManager.h"
+#include "ServoManager.h"
+#include "FaceManager.h"
 
 void setup()
 {
     Serial.begin(115200);
 
-    otaSetup();
+    bluetoothSetup();
+    servoSetup();
+    faceSetup();
 }
 
 void loop()
 {
-    otaLoop();
+    bluetoothLoop();
+
+    if(command=="LEFT")
+        servoLeft();
+
+    if(command=="RIGHT")
+        servoRight();
+
+    if(command=="CENTER")
+        servoCenter();
+
+    if(command=="HAPPY")
+        happyFace();
+
+    if(command=="IDLE")
+        idleFace();
+
+    if(command=="SLEEP")
+        sleepFace();
 }
