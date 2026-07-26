@@ -1,7 +1,25 @@
-name: Build
-on: [push]
+name: Build ESP32
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
- build:
-  runs-on: ubuntu-latest
-  steps:
-   - uses: actions/checkout@v4
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build PlatformIO
+        uses: karniv00l/platformio-run-action@v1
+
+      - name: Upload Firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: Echo-Firmware
+          path: |
+            .pio/build/esp32dev/firmware.bin
+            .pio/build/esp32dev/bootloader.bin
+            .pio/build/esp32dev/partitions.bin
