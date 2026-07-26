@@ -9,6 +9,8 @@ void setup()
     Serial.begin(115200);
 
     bluetoothSetup();
+    delay(500);
+    
     servoSetup();
     faceSetup();
 }
