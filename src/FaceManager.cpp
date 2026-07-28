@@ -12,41 +12,45 @@
 #define OLED_CS -1
 
 Adafruit_SSD1306 display(
-  SCREEN_WIDTH,
-  SCREEN_HEIGHT,
-  &SPI,
-  OLED_DC,
-  OLED_RST,
-  OLED_CS
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    &SPI,
+    OLED_DC,
+    OLED_RST,
+    OLED_CS
 );
-
 
 void faceSetup()
 {
     SPI.begin(18, -1, 23, -1);
 
-    if (!display.begin(SSD1306_SWITCHCAPVCC)) {
+    if (!display.begin(SSD1306_SWITCHCAPVCC))
+    {
         Serial.println("OLED FAILED");
-        while(true);
+        while (true);
     }
+
+    display.clearDisplay();
+    display.display();
+    delay(200);
 
     idleFace();
 }
-
 
 void happyFace()
 {
     display.clearDisplay();
 
+    // Eyes
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
     display.fillCircle(88, 24, 6, SSD1306_WHITE);
 
+    // Smile
     display.drawCircle(64, 40, 16, SSD1306_WHITE);
     display.fillRect(48, 24, 32, 16, SSD1306_BLACK);
 
     display.display();
 }
-
 
 void idleFace()
 {
@@ -58,13 +62,12 @@ void idleFace()
     display.display();
 }
 
-
 void sleepFace()
 {
     display.clearDisplay();
 
-    display.drawLine(35,24,45,24,SSD1306_WHITE);
-    display.drawLine(83,24,93,24,SSD1306_WHITE);
+    display.drawLine(35, 24, 45, 24, SSD1306_WHITE);
+    display.drawLine(83, 24, 93, 24, SSD1306_WHITE);
 
     display.display();
 }
