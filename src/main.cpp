@@ -20,20 +20,40 @@ void loop()
     bluetoothLoop();
 
     if(command=="LEFT")
+    {
         servoLeft();
+        command="";
+    }
 
-    if(command=="RIGHT")
+    else if(command=="RIGHT")
+    {
         servoRight();
+        command="";
+    }
 
-    if(command=="CENTER")
+    else if(command=="CENTER")
+    {
         servoCenter();
+        command="";
+    }
 
-    if(command=="HAPPY")
+    else if(command=="HAPPY")
+    {
         happyFace();
+        command="";
+    }
 
-    if(command=="IDLE")
+    else if(command=="IDLE")
+    {
         idleFace();
+        command="";
+    }
 
-    if(command=="SLEEP")
+    else if(command=="SLEEP")
+    {
         sleepFace();
+        command="";
+    }
+
+    delay(20);
 }
