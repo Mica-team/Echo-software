@@ -23,6 +23,7 @@ Adafruit_SSD1306 display(
 void faceSetup()
 {
     SPI.begin(18, -1, 23, -1);
+    SPI.setFrequency(1000000);   // 1 MHz
 
     if (!display.begin(SSD1306_SWITCHCAPVCC))
     {
@@ -40,6 +41,10 @@ void faceSetup()
 void happyFace()
 {
     display.clearDisplay();
+    display.display();
+delay(5);
+
+display.clearDisplay();
 
     // Eyes
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
@@ -55,6 +60,10 @@ void happyFace()
 void idleFace()
 {
     display.clearDisplay();
+    display.display();
+delay(5);
+
+display.clearDisplay();
 
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
     display.fillCircle(88, 24, 6, SSD1306_WHITE);
@@ -65,6 +74,10 @@ void idleFace()
 void sleepFace()
 {
     display.clearDisplay();
+    display.display();
+delay(5);
+
+display.clearDisplay();
 
     display.drawLine(35, 24, 45, 24, SSD1306_WHITE);
     display.drawLine(83, 24, 93, 24, SSD1306_WHITE);
