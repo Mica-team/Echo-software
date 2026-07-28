@@ -3,6 +3,7 @@
 #include "BluetoothManager.h"
 #include "ServoManager.h"
 #include "FaceManager.h"
+#include "OTAManager.h"
 
 void setup()
 {
@@ -13,11 +14,13 @@ void setup()
     
     servoSetup();
     faceSetup();
+    otaSetup();
 }
 
 void loop()
 {
     bluetoothLoop();
+    otaLoop();
 
     if(command=="LEFT")
     {
