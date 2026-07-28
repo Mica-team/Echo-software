@@ -1,0 +1,7 @@
+{
+    "version":"1.0.0",
+    "build":"1",
+    "channel":"stable",
+    "firmware":"firmware.bin",
+    "sha256":"firmware.sha256"
+}
