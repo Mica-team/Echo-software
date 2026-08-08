@@ -11,7 +11,7 @@ void setup()
 
     bluetoothSetup();
     delay(500);
-    
+
     servoSetup();
     faceSetup();
     otaSetup();
@@ -22,40 +22,48 @@ void loop()
     bluetoothLoop();
     otaLoop();
 
-    if(command=="LEFT")
+    // -----------------------------
+    // Servo commands
+    // -----------------------------
+
+    if (command == "LEFT")
     {
         servoLeft();
-        command="";
+        command = "";
     }
 
-    else if(command=="RIGHT")
+    else if (command == "RIGHT")
     {
         servoRight();
-        command="";
+        command = "";
     }
 
-    else if(command=="CENTER")
+    else if (command == "CENTER")
     {
         servoCenter();
-        command="";
+        command = "";
     }
 
-    else if(command=="HAPPY")
+    // -----------------------------
+    // Face commands
+    // -----------------------------
+
+    else if (command == "HAPPY")
     {
         happyFace();
-        command="";
+        command = "";
     }
 
-    else if(command=="IDLE")
+    else if (command == "IDLE")
     {
         idleFace();
-        command="";
+        command = "";
     }
 
-    else if(command=="SLEEP")
+    else if (command == "SLEEP")
     {
         sleepFace();
-        command="";
+        command = "";
     }
 
     delay(20);
