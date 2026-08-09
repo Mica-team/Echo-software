@@ -8,14 +8,8 @@
 #include <ArduinoJson.h>
 #include <mbedtls/sha256.h>
 
-// OTA is intentionally isolated in this file. Other Echo managers do not need
-// to know about Wi-Fi, firmware downloads, or update storage.
 #define CURRENT_VERSION "1.0.0"
 #define CURRENT_BUILD 1
-
-#ifndef ECHO_BLUE_LED_PIN
-#define ECHO_BLUE_LED_PIN 2
-#endif
 
 static const char* VERSION_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/version.json";
@@ -24,7 +18,7 @@ static const char* FIRMWARE_BASE_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/";
 
 static const unsigned long WIFI_RETRY_INTERVAL = 10000UL;
-static const unsigned long OTA_CHECK_INTERVAL = 300000UL; // 5 minutes
+static const unsigned long OTA_CHECK_INTERVAL = 300000UL;
 
 static unsigned long lastWiFiAttempt = 0;
 static unsigned long lastOTACheck = 0;
@@ -32,10 +26,7 @@ static bool updateInProgress = false;
 static bool updateFound = false;
 
 static Preferences preferences;
-static Preferences ledPreferences;
 
-// BluetoothManager.cpp owns this command buffer. OTA only reads it so we can
-// provision Wi-Fi without changing the existing Bluetooth manager.
 extern String command;
 
 static String wifiSSID;
@@ -58,23 +49,6 @@ static void saveWiFiCredentials(const String& ssid, const String& password)
 
     wifiSSID = ssid;
     wifiPassword = password;
-}
-
-// Each successful OTA toggles the LED state for the NEXT firmware boot.
-// First firmware defaults to OFF. First OTA -> ON. Second OTA -> OFF, etc.
-static void prepareNextOTALedState()
-{
-    bool currentState = false;
-
-    ledPreferences.begin("echo-led", false);
-    currentState = ledPreferences.getBool("ota_led", false);
-    ledPreferences.putBool("ota_led", !currentState);
-    ledPreferences.end();
-
-    Serial.printf(
-        "OTA: Next firmware onboard LED will be %s\n",
-        !currentState ? "ON" : "OFF"
-    );
 }
 
 static void handleBluetoothWiFiCommand()
@@ -363,17 +337,12 @@ static void checkForUpdate()
 
     if (downloadAndFlash(String(firmwareFile), String(expectedSHA)))
     {
-        // Only toggle the persistent LED state after the new image has been
-        // fully downloaded, SHA-256 verified, and installed successfully.
-        prepareNextOTALedState();
-
         Serial.println("OTA: Update complete. Restarting...");
         delay(1000);
         ESP.restart();
     }
     else
     {
-        // Failed updates do not change the LED state.
         Serial.println("OTA: Update failed. Keeping current firmware.");
     }
 
