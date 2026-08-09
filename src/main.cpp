@@ -5,9 +5,20 @@
 #include "FaceManager.h"
 #include "OTAManager.h"
 
+// ESP32 DevKit onboard blue LED is normally connected to GPIO 2.
+// Keep it OFF during normal operation so a firmware update can be
+// visually distinguished from the previous firmware state.
+#ifndef ECHO_BLUE_LED_PIN
+#define ECHO_BLUE_LED_PIN 2
+#endif
+
 void setup()
 {
     Serial.begin(115200);
+
+    // Turn the onboard blue LED off immediately.
+    pinMode(ECHO_BLUE_LED_PIN, OUTPUT);
+    digitalWrite(ECHO_BLUE_LED_PIN, LOW);
 
     delay(500);
 
