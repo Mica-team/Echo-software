@@ -1,6 +1,6 @@
 {
-  "version": "1.0.2",
-  "build": 3,
+  "version": "1.0.1",
+  "build": 2,
   "channel": "stable",
   "firmware": "firmware.bin",
   "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8"
