@@ -2,6 +2,13 @@
 #include <BluetoothSerial.h>
 #include "BluetoothManager.h"
 
+// ============================================================
+// Firmware version
+// Keep these numbers synchronized with OTA version.json.
+// ============================================================
+#define FIRMWARE_VERSION "1.0.1"
+#define FIRMWARE_BUILD 2
+
 BluetoothSerial SerialBT;
 String command = "";
 
@@ -15,24 +22,59 @@ void bluetoothSetup()
     if (!SerialBT.begin("Echo"))
     {
         Serial.println("Bluetooth FAILED!");
-        while (true) delay(1000);
+        while (true)
+            delay(1000);
     }
 
     Serial.println("Bluetooth READY");
+
+    Serial.printf(
+        "Firmware: %s | Build: %d\n",
+        FIRMWARE_VERSION,
+        FIRMWARE_BUILD
+    );
+
     lastTemperatureReport = millis();
 }
 
+// ============================================================
+// Send real firmware version/build
+// ============================================================
+static void sendVersionReport()
+{
+    SerialBT.printf(
+        "VERSION:%s\n",
+        FIRMWARE_VERSION
+    );
+
+    SerialBT.printf(
+        "BUILD:%d\n",
+        FIRMWARE_BUILD
+    );
+
+    Serial.printf(
+        "VERSION: %s | BUILD: %d\n",
+        FIRMWARE_VERSION,
+        FIRMWARE_BUILD
+    );
+}
+
+// ============================================================
+// Temperature + diagnostic telemetry
+// ============================================================
 static void sendTemperatureReport()
 {
     const float temperature = temperatureRead();
     const unsigned long freeHeap = ESP.getFreeHeap();
     const unsigned long cpuMHz = getCpuFrequencyMhz();
-    const char* btStatus = SerialBT.hasClient() ? "CONNECTED" : "WAITING";
+    const char* btStatus =
+        SerialBT.hasClient() ? "CONNECTED" : "WAITING";
 
-    // Existing Android telemetry format.
-    SerialBT.printf("TEMP:%.2f\n", temperature);
+    SerialBT.printf(
+        "TEMP:%.2f\n",
+        temperature
+    );
 
-    // Diagnostic data for investigating Bluetooth-related heating/load.
     SerialBT.printf(
         "INFO:TEMP=%.2f;CPU=%lu;HEAP=%lu;BT=%s\n",
         temperature,
@@ -52,17 +94,23 @@ static void sendTemperatureReport()
 
 void bluetoothLoop()
 {
-    // Non-blocking command reader. Avoids readStringUntil() timeout waits.
+    // --------------------------------------------------------
+    // Non-blocking Bluetooth command reader
+    // --------------------------------------------------------
     while (SerialBT.available())
     {
-        const char c = static_cast<char>(SerialBT.read());
+        const char c =
+            static_cast<char>(SerialBT.read());
 
         if (c == '\n' || c == '\r')
         {
             if (command.length() > 0)
             {
                 command.trim();
-                Serial.print("Bluetooth command: ");
+
+                Serial.print(
+                    "Bluetooth command: "
+                );
                 Serial.println(command);
             }
         }
@@ -70,7 +118,7 @@ void bluetoothLoop()
         {
             command += c;
 
-            // Prevent a malformed client from filling RAM indefinitely.
+            // Prevent malformed input from filling RAM.
             if (command.length() > 128)
             {
                 command = "";
@@ -78,10 +126,24 @@ void bluetoothLoop()
         }
     }
 
+    // --------------------------------------------------------
+    // Handle VERSION command immediately
+    // --------------------------------------------------------
+    if (command == "VERSION")
+    {
+        sendVersionReport();
+        command = "";
+    }
+
+    // --------------------------------------------------------
+    // Temperature every 30 seconds
+    // --------------------------------------------------------
     const unsigned long now = millis();
 
-    // Report every 30 seconds.
-    if (now - lastTemperatureReport >= TEMPERATURE_INTERVAL)
+    if (
+        now - lastTemperatureReport >=
+        TEMPERATURE_INTERVAL
+    )
     {
         lastTemperatureReport = now;
 
@@ -92,7 +154,8 @@ void bluetoothLoop()
         else
         {
             Serial.printf(
-                "Bluetooth not connected | CPU: %lu MHz | HEAP: %lu\n",
+                "Bluetooth not connected | "
+                "CPU: %lu MHz | HEAP: %lu\n",
                 getCpuFrequencyMhz(),
                 ESP.getFreeHeap()
             );
