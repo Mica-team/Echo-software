@@ -14,12 +14,23 @@ String command = "";
 
 static unsigned long lastTemperatureReport = 0;
 static const unsigned long TEMPERATURE_INTERVAL = 30000UL;
+static String echoBluetoothName;
+
+static String buildEchoBluetoothName()
+{
+    const uint32_t uniqueId = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
+    char suffix[7];
+    snprintf(suffix, sizeof(suffix), "%06lX", static_cast<unsigned long>(uniqueId));
+    return String("Echo-") + String(suffix);
+}
 
 void bluetoothSetup()
 {
     delay(2000);
 
-    if (!SerialBT.begin("Echo"))
+    echoBluetoothName = buildEchoBluetoothName();
+
+    if (!SerialBT.begin(echoBluetoothName.c_str()))
     {
         Serial.println("Bluetooth FAILED!");
         while (true)
@@ -27,6 +38,8 @@ void bluetoothSetup()
     }
 
     Serial.println("Bluetooth READY");
+    Serial.print("Bluetooth name: ");
+    Serial.println(echoBluetoothName);
 
     Serial.printf(
         "Firmware: %s | Build: %d\n",
@@ -35,6 +48,28 @@ void bluetoothSetup()
     );
 
     lastTemperatureReport = millis();
+}
+
+// ============================================================
+// Identify this device to the Echo Android app.
+// The app must verify this response after connecting before it
+// treats the Bluetooth connection as an Echo connection.
+// ============================================================
+static void sendIdentityReport()
+{
+    const uint32_t uniqueId = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
+
+    char identity[64];
+    snprintf(
+        identity,
+        sizeof(identity),
+        "ECHO_ID:Echo-%06lX\n",
+        static_cast<unsigned long>(uniqueId)
+    );
+
+    SerialBT.print(identity);
+    Serial.print("Identity: ");
+    Serial.print(identity);
 }
 
 // ============================================================
@@ -124,6 +159,15 @@ void bluetoothLoop()
                 command = "";
             }
         }
+    }
+
+    // --------------------------------------------------------
+    // Handle identity handshake immediately
+    // --------------------------------------------------------
+    if (command == "IDENTIFY")
+    {
+        sendIdentityReport();
+        command = "";
     }
 
     // --------------------------------------------------------
