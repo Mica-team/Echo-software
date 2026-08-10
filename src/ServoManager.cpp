@@ -26,3 +26,10 @@ void servoRight()
 {
     head.write(140);
 }
+
+// Release the PWM peripheral while OTA is running.
+// This is safe even when no physical servo is connected.
+void servoStop()
+{
+    head.detach();
+}
