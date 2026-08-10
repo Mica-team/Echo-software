@@ -21,6 +21,15 @@ void loop()
     bluetoothLoop();
     otaLoop();
 
+    // OTA is an exclusive mode. Once the update command is accepted,
+    // normal face/servo work is skipped until the device restarts or OTA
+    // fails and restores Bluetooth.
+    if (otaIsInProgress())
+    {
+        delay(10);
+        return;
+    }
+
     if (command == "LEFT")
     {
         servoLeft();

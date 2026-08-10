@@ -8,8 +8,13 @@
 #include <ArduinoJson.h>
 #include <mbedtls/sha256.h>
 
-#define CURRENT_VERSION "1.0.0"
-#define CURRENT_BUILD 1
+#include "BluetoothManager.h"
+#include "ServoManager.h"
+#include "FaceManager.h"
+
+// Keep these numbers synchronized with echo-update/version.json.
+#define CURRENT_VERSION "1.0.1"
+#define CURRENT_BUILD 2
 
 static const char* VERSION_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/version.json";
@@ -17,17 +22,13 @@ static const char* VERSION_URL =
 static const char* FIRMWARE_BASE_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/";
 
-static const unsigned long WIFI_RETRY_INTERVAL = 10000UL;
-static const unsigned long OTA_CHECK_INTERVAL = 300000UL;
+static const unsigned long OTA_WIFI_TIMEOUT = 20000UL;
 
-static unsigned long lastWiFiAttempt = 0;
-static unsigned long lastOTACheck = 0;
 static bool updateInProgress = false;
-static bool updateFound = false;
+static bool wifiConnectionRequested = false;
+static bool wifiStatusReported = false;
 
 static Preferences preferences;
-
-extern String command;
 
 static String wifiSSID;
 static String wifiPassword;
@@ -51,6 +52,20 @@ static void saveWiFiCredentials(const String& ssid, const String& password)
     wifiPassword = password;
 }
 
+static void requestWiFiConnection()
+{
+    if (wifiSSID.length() == 0)
+        return;
+
+    WiFi.disconnect(true, true);
+    WiFi.mode(WIFI_STA);
+    wifiConnectionRequested = true;
+    wifiStatusReported = false;
+
+    Serial.println("OTA: Connecting to configured Wi-Fi once");
+    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+}
+
 static void handleBluetoothWiFiCommand()
 {
     if (command.startsWith("WIFI_SSID="))
@@ -62,8 +77,6 @@ static void handleBluetoothWiFiCommand()
         {
             saveWiFiCredentials(ssid, wifiPassword);
             Serial.println("OTA: Wi-Fi SSID saved");
-            WiFi.disconnect(true, true);
-            lastWiFiAttempt = 0;
         }
 
         command = "";
@@ -73,10 +86,17 @@ static void handleBluetoothWiFiCommand()
         String password = command.substring(10);
         password.trim();
 
-        saveWiFiCredentials(wifiSSID, password);
-        Serial.println("OTA: Wi-Fi password saved");
-        WiFi.disconnect(true, true);
-        lastWiFiAttempt = 0;
+        if (wifiSSID.length() > 0)
+        {
+            saveWiFiCredentials(wifiSSID, password);
+            Serial.println("OTA: Wi-Fi password saved");
+            requestWiFiConnection();
+        }
+        else
+        {
+            Serial.println("OTA: Cannot save password before SSID");
+        }
+
         command = "";
     }
     else if (command == "WIFI_CLEAR")
@@ -87,28 +107,65 @@ static void handleBluetoothWiFiCommand()
 
         wifiSSID = "";
         wifiPassword = "";
+        wifiConnectionRequested = false;
+        wifiStatusReported = false;
         WiFi.disconnect(true, true);
         Serial.println("OTA: Wi-Fi credentials cleared");
         command = "";
     }
 }
 
-static void connectWiFi()
+static void reportWiFiStatus()
 {
-    if (wifiSSID.length() == 0)
+    if (!wifiConnectionRequested || wifiStatusReported)
         return;
 
     if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.print("OTA: Wi-Fi connected: ");
+        Serial.println(WiFi.SSID());
+        SerialBT.print("WIFI_CONNECTED\n");
+        wifiStatusReported = true;
         return;
+    }
 
-    if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL)
-        return;
+    // Do not repeatedly call WiFi.begin(). The Wi-Fi stack handles the
+    // connection attempt itself; retry storms were contributing to heat.
+}
 
-    lastWiFiAttempt = millis();
+static bool waitForWiFi()
+{
+    if (wifiSSID.length() == 0)
+    {
+        Serial.println("OTA: No Wi-Fi credentials configured");
+        return false;
+    }
 
-    Serial.println("OTA: Connecting Wi-Fi...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        WiFi.disconnect(true, true);
+        WiFi.mode(WIFI_STA);
+        wifiConnectionRequested = true;
+        wifiStatusReported = false;
+        Serial.println("OTA: Starting Wi-Fi connection for manual update");
+        WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+    }
+
+    const unsigned long started = millis();
+
+    while (millis() - started < OTA_WIFI_TIMEOUT)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Serial.println("OTA: Wi-Fi connected for manual update");
+            return true;
+        }
+
+        delay(100);
+    }
+
+    Serial.println("OTA: Wi-Fi connection timeout");
+    return false;
 }
 
 static bool isNewerBuild(int latestBuild)
@@ -264,21 +321,32 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
     return true;
 }
 
-static void checkForUpdate()
+// OTA is deliberately manual. The ESP32 never polls version.json by itself.
+// The Android app must send OTA_UPDATE after the user taps Update Software.
+static void handleManualUpdate()
 {
-    if (updateInProgress || WiFi.status() != WL_CONNECTED)
+    command = "";
+    updateInProgress = true;
+
+    Serial.println("OTA: Manual update requested");
+
+    // Connect to Wi-Fi only because the user explicitly requested an update.
+    if (!waitForWiFi())
+    {
+        Serial.println("OTA_WIFI_NOT_CONNECTED");
+        updateInProgress = false;
         return;
+    }
 
-    if (millis() - lastOTACheck < OTA_CHECK_INTERVAL)
-        return;
-
-    lastOTACheck = millis();
-
+    // First read metadata while Bluetooth is still available so the app gets
+    // a useful result even when there is no newer firmware.
     HTTPClient http;
 
     if (!http.begin(VERSION_URL))
     {
         Serial.println("OTA: Version URL failed");
+        SerialBT.print("OTA_ERROR:VERSION_URL\n");
+        updateInProgress = false;
         return;
     }
 
@@ -289,7 +357,9 @@ static void checkForUpdate()
     {
         Serial.print("OTA: Version check failed: ");
         Serial.println(code);
+        SerialBT.printf("OTA_ERROR:VERSION_HTTP_%d\n", code);
         http.end();
+        updateInProgress = false;
         return;
     }
 
@@ -302,6 +372,8 @@ static void checkForUpdate()
     if (err)
     {
         Serial.println("OTA: Bad version.json");
+        SerialBT.print("OTA_ERROR:BAD_METADATA\n");
+        updateInProgress = false;
         return;
     }
 
@@ -311,29 +383,41 @@ static void checkForUpdate()
     const char* expectedSHA = doc["sha256"] | "";
     const char* channel = doc["channel"] | "stable";
 
-    Serial.printf("OTA: Current %s (%d), Latest %s (%d), channel %s\n",
-                  CURRENT_VERSION,
-                  CURRENT_BUILD,
-                  latestVersion,
-                  latestBuild,
-                  channel);
+    Serial.printf(
+        "OTA: Current %s (%d), Latest %s (%d), channel %s\n",
+        CURRENT_VERSION,
+        CURRENT_BUILD,
+        latestVersion,
+        latestBuild,
+        channel
+    );
 
     if (!isNewerBuild(latestBuild))
     {
+        SerialBT.printf("OTA_UP_TO_DATE:%s:%d\n", CURRENT_VERSION, CURRENT_BUILD);
         Serial.println("OTA: Already latest");
+        updateInProgress = false;
         return;
     }
 
     if (latestVersion[0] == '\0' || expectedSHA[0] == '\0')
     {
         Serial.println("OTA: Missing update metadata");
+        SerialBT.print("OTA_ERROR:MISSING_METADATA\n");
+        updateInProgress = false;
         return;
     }
 
-    Serial.printf("OTA: New firmware %s available\n", latestVersion);
+    // Enter the exclusive OTA state only when an update is actually needed.
+    // Bluetooth, servo PWM, and normal command/face work are stopped so the
+    // radio/CPU can focus on the firmware transfer.
+    SerialBT.printf("OTA_AVAILABLE:%s:%d\n", latestVersion, latestBuild);
+    delay(100);
+    bluetoothStop();
+    servoStop();
+    sleepFace();
 
-    updateInProgress = true;
-    updateFound = true;
+    Serial.println("OTA: Entering exclusive update mode");
 
     if (downloadAndFlash(String(firmwareFile), String(expectedSHA)))
     {
@@ -341,17 +425,19 @@ static void checkForUpdate()
         delay(1000);
         ESP.restart();
     }
-    else
-    {
-        Serial.println("OTA: Update failed. Keeping current firmware.");
-    }
 
+    // If flashing failed, restore Bluetooth so the app can report/retry.
+    Serial.println("OTA: Update failed. Restoring Bluetooth.");
+    bluetoothSetup();
     updateInProgress = false;
 }
 
 void otaSetup()
 {
     loadWiFiCredentials();
+
+    wifiConnectionRequested = false;
+    wifiStatusReported = false;
 
     if (wifiSSID.length() == 0)
     {
@@ -360,15 +446,29 @@ void otaSetup()
     }
     else
     {
-        Serial.println("OTA Ready");
+        Serial.println("OTA Ready - automatic Wi-Fi/OTA polling disabled");
     }
-
-    connectWiFi();
 }
 
 void otaLoop()
 {
+    if (updateInProgress)
+        return;
+
     handleBluetoothWiFiCommand();
-    connectWiFi();
-    checkForUpdate();
+    reportWiFiStatus();
+
+    if (command == "OTA_UPDATE")
+    {
+        handleManualUpdate();
+        return;
+    }
+
+    // No WiFi.begin() retry loop and no GitHub polling here.
+    // This keeps the ESP32 cool while it is being used normally.
+}
+
+bool otaIsInProgress()
+{
+    return updateInProgress;
 }

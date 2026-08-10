@@ -1,9 +1,9 @@
-#ifndef BLUETOOTH_MANAGER_H
-#define BLUETOOTH_MANAGER_H
+#pragma once
 
-void bluetoothSetup();
-void bluetoothLoop();
+#include <Arduino.h>
 
 extern String command;
 
-#endif
+void bluetoothSetup();
+void bluetoothLoop();
+void bluetoothStop();
