@@ -22,11 +22,11 @@ static const char* VERSION_URL =
 static const char* FIRMWARE_BASE_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/";
 
-static const unsigned long WIFI_RETRY_INTERVAL = 10000UL;
 static const unsigned long OTA_WIFI_TIMEOUT = 20000UL;
 
-static unsigned long lastWiFiAttempt = 0;
 static bool updateInProgress = false;
+static bool wifiConnectionRequested = false;
+static bool wifiStatusReported = false;
 
 static Preferences preferences;
 
@@ -52,6 +52,20 @@ static void saveWiFiCredentials(const String& ssid, const String& password)
     wifiPassword = password;
 }
 
+static void requestWiFiConnection()
+{
+    if (wifiSSID.length() == 0)
+        return;
+
+    WiFi.disconnect(true, true);
+    WiFi.mode(WIFI_STA);
+    wifiConnectionRequested = true;
+    wifiStatusReported = false;
+
+    Serial.println("OTA: Connecting to configured Wi-Fi once");
+    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+}
+
 static void handleBluetoothWiFiCommand()
 {
     if (command.startsWith("WIFI_SSID="))
@@ -63,8 +77,6 @@ static void handleBluetoothWiFiCommand()
         {
             saveWiFiCredentials(ssid, wifiPassword);
             Serial.println("OTA: Wi-Fi SSID saved");
-            WiFi.disconnect(true, true);
-            lastWiFiAttempt = 0;
         }
 
         command = "";
@@ -78,8 +90,7 @@ static void handleBluetoothWiFiCommand()
         {
             saveWiFiCredentials(wifiSSID, password);
             Serial.println("OTA: Wi-Fi password saved");
-            WiFi.disconnect(true, true);
-            lastWiFiAttempt = 0;
+            requestWiFiConnection();
         }
         else
         {
@@ -96,28 +107,30 @@ static void handleBluetoothWiFiCommand()
 
         wifiSSID = "";
         wifiPassword = "";
+        wifiConnectionRequested = false;
+        wifiStatusReported = false;
         WiFi.disconnect(true, true);
         Serial.println("OTA: Wi-Fi credentials cleared");
         command = "";
     }
 }
 
-static void connectWiFi()
+static void reportWiFiStatus()
 {
-    if (wifiSSID.length() == 0)
+    if (!wifiConnectionRequested || wifiStatusReported)
         return;
 
     if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.print("OTA: Wi-Fi connected: ");
+        Serial.println(WiFi.SSID());
+        SerialBT.print("WIFI_CONNECTED\n");
+        wifiStatusReported = true;
         return;
+    }
 
-    if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL)
-        return;
-
-    lastWiFiAttempt = millis();
-
-    Serial.println("OTA: Connecting Wi-Fi...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+    // Do not repeatedly call WiFi.begin(). The Wi-Fi stack handles the
+    // connection attempt itself; retry storms were contributing to heat.
 }
 
 static bool waitForWiFi()
@@ -128,11 +141,15 @@ static bool waitForWiFi()
         return false;
     }
 
-    if (WiFi.status() == WL_CONNECTED)
-        return true;
-
-    lastWiFiAttempt = 0;
-    connectWiFi();
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        WiFi.disconnect(true, true);
+        WiFi.mode(WIFI_STA);
+        wifiConnectionRequested = true;
+        wifiStatusReported = false;
+        Serial.println("OTA: Starting Wi-Fi connection for manual update");
+        WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+    }
 
     const unsigned long started = millis();
 
@@ -419,6 +436,9 @@ void otaSetup()
 {
     loadWiFiCredentials();
 
+    wifiConnectionRequested = false;
+    wifiStatusReported = false;
+
     if (wifiSSID.length() == 0)
     {
         Serial.println("OTA Ready - configure Wi-Fi over Bluetooth");
@@ -426,12 +446,8 @@ void otaSetup()
     }
     else
     {
-        Serial.println("OTA Ready - automatic update checks disabled");
+        Serial.println("OTA Ready - automatic Wi-Fi/OTA polling disabled");
     }
-
-    // Wi-Fi may reconnect in the background for normal device connectivity,
-    // but it NEVER starts an OTA update on its own.
-    connectWiFi();
 }
 
 void otaLoop()
@@ -440,6 +456,7 @@ void otaLoop()
         return;
 
     handleBluetoothWiFiCommand();
+    reportWiFiStatus();
 
     if (command == "OTA_UPDATE")
     {
@@ -447,8 +464,8 @@ void otaLoop()
         return;
     }
 
-    // Keep Wi-Fi available, but never poll GitHub or flash automatically.
-    connectWiFi();
+    // No WiFi.begin() retry loop and no GitHub polling here.
+    // This keeps the ESP32 cool while it is being used normally.
 }
 
 bool otaIsInProgress()
