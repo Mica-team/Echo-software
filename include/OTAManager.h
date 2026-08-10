@@ -2,3 +2,4 @@
 
 void otaSetup();
 void otaLoop();
+bool otaIsInProgress();
