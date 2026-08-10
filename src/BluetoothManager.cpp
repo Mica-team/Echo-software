@@ -50,6 +50,20 @@ void bluetoothSetup()
     lastTemperatureReport = millis();
 }
 
+// Stop Bluetooth before entering OTA exclusive mode.
+// OTA is intentionally started only by an explicit command from the app.
+void bluetoothStop()
+{
+    if (SerialBT.hasClient())
+    {
+        SerialBT.print("OTA_START\n");
+        delay(100);
+    }
+
+    SerialBT.end();
+    Serial.println("Bluetooth stopped for OTA exclusive mode");
+}
+
 // ============================================================
 // Identify this device to the Echo Android app.
 // The app must verify this response after connecting before it
