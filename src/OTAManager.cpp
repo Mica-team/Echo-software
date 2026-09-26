@@ -8,8 +8,8 @@
 #include <ArduinoJson.h>
 #include <mbedtls/sha256.h>
 
-#define CURRENT_VERSION "1.0.0"
-#define CURRENT_BUILD 1
+#define CURRENT_VERSION "1.0.1"
+#define CURRENT_BUILD 2
 
 static const char* VERSION_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/version.json";
@@ -17,13 +17,12 @@ static const char* VERSION_URL =
 static const char* FIRMWARE_BASE_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/";
 
-static const unsigned long WIFI_RETRY_INTERVAL = 10000UL;
-static const unsigned long OTA_CHECK_INTERVAL = 300000UL;
+static constexpr unsigned long WIFI_RETRY_INTERVAL = 10000UL;
+static constexpr unsigned long OTA_CHECK_INTERVAL = 300000UL;
 
 static unsigned long lastWiFiAttempt = 0;
 static unsigned long lastOTACheck = 0;
 static bool updateInProgress = false;
-static bool updateFound = false;
 
 static Preferences preferences;
 
@@ -38,6 +37,9 @@ static void loadWiFiCredentials()
     wifiSSID = preferences.getString("ssid", "");
     wifiPassword = preferences.getString("pass", "");
     preferences.end();
+
+    wifiSSID.reserve(64);
+    wifiPassword.reserve(64);
 }
 
 static void saveWiFiCredentials(const String& ssid, const String& password)
@@ -95,10 +97,7 @@ static void handleBluetoothWiFiCommand()
 
 static void connectWiFi()
 {
-    if (wifiSSID.length() == 0)
-        return;
-
-    if (WiFi.status() == WL_CONNECTED)
+    if (wifiSSID.length() == 0 || WiFi.status() == WL_CONNECTED)
         return;
 
     if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL)
@@ -166,6 +165,7 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buffer[1024];
     size_t written = 0;
+    int lastProgress = -1;
 
     mbedtls_sha256_context sha;
     mbedtls_sha256_init(&sha);
@@ -203,8 +203,16 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
             written += readBytes;
             lastData = millis();
 
-            int progress = (int)((written * 100ULL) / contentLength);
-            Serial.printf("OTA: Download %d%%\n", progress);
+            const int progress =
+                (int)((written * 100ULL) / contentLength);
+
+            // Serial I/O is relatively expensive. Log only when the
+            // progress moves by another 5 percent.
+            if (progress >= lastProgress + 5 || progress == 100)
+            {
+                lastProgress = progress;
+                Serial.printf("OTA: Download %d%%\n", progress);
+            }
         }
         else
         {
@@ -234,7 +242,7 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
 
     char actualSHA[65];
     for (int i = 0; i < 32; i++)
-        sprintf(actualSHA + (i * 2), "%02x", digest[i]);
+        snprintf(actualSHA + (i * 2), 3, "%02x", digest[i]);
     actualSHA[64] = '\0';
 
     String expected = expectedSHA;
@@ -311,12 +319,14 @@ static void checkForUpdate()
     const char* expectedSHA = doc["sha256"] | "";
     const char* channel = doc["channel"] | "stable";
 
-    Serial.printf("OTA: Current %s (%d), Latest %s (%d), channel %s\n",
-                  CURRENT_VERSION,
-                  CURRENT_BUILD,
-                  latestVersion,
-                  latestBuild,
-                  channel);
+    Serial.printf(
+        "OTA: Current %s (%d), Latest %s (%d), channel %s\n",
+        CURRENT_VERSION,
+        CURRENT_BUILD,
+        latestVersion,
+        latestBuild,
+        channel
+    );
 
     if (!isNewerBuild(latestBuild))
     {
@@ -333,7 +343,6 @@ static void checkForUpdate()
     Serial.printf("OTA: New firmware %s available\n", latestVersion);
 
     updateInProgress = true;
-    updateFound = true;
 
     if (downloadAndFlash(String(firmwareFile), String(expectedSHA)))
     {
