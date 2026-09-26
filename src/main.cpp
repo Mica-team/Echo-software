@@ -10,7 +10,6 @@ void setup()
     Serial.begin(115200);
 
     bluetoothSetup();
-    delay(500);
     servoSetup();
     faceSetup();
     otaSetup();
@@ -52,5 +51,7 @@ void loop()
         command = "";
     }
 
-    delay(20);
+    // Keep the main loop responsive without burning CPU in a
+    // tight spin. Bluetooth/Wi-Fi background tasks still run.
+    delay(2);
 }

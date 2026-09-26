@@ -20,67 +20,82 @@ Adafruit_SSD1306 display(
     OLED_CS
 );
 
+enum class Face : uint8_t
+{
+    None,
+    Happy,
+    Idle,
+    Sleep
+};
+
+static Face currentFace = Face::None;
+
+static void beginFrame()
+{
+    display.clearDisplay();
+}
+
+static void finishFrame()
+{
+    display.display();
+}
+
 void faceSetup()
 {
     SPI.begin(18, -1, 23, -1);
-    SPI.setFrequency(1000000);   // 1 MHz
+    SPI.setFrequency(8000000);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC))
     {
         Serial.println("OLED FAILED");
-        while (true);
+        return;
     }
 
-    display.clearDisplay();
-    display.display();
-    delay(200);
-
+    currentFace = Face::None;
     idleFace();
 }
 
 void happyFace()
 {
-    display.clearDisplay();
-    display.display();
-delay(5);
+    if (currentFace == Face::Happy)
+        return;
 
-display.clearDisplay();
+    beginFrame();
 
-    // Eyes
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
     display.fillCircle(88, 24, 6, SSD1306_WHITE);
 
-    // Smile
     display.drawCircle(64, 40, 16, SSD1306_WHITE);
     display.fillRect(48, 24, 32, 16, SSD1306_BLACK);
 
-    display.display();
+    finishFrame();
+    currentFace = Face::Happy;
 }
 
 void idleFace()
 {
-    display.clearDisplay();
-    display.display();
-delay(5);
+    if (currentFace == Face::Idle)
+        return;
 
-display.clearDisplay();
+    beginFrame();
 
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
     display.fillCircle(88, 24, 6, SSD1306_WHITE);
 
-    display.display();
+    finishFrame();
+    currentFace = Face::Idle;
 }
 
 void sleepFace()
 {
-    display.clearDisplay();
-    display.display();
-delay(5);
+    if (currentFace == Face::Sleep)
+        return;
 
-display.clearDisplay();
+    beginFrame();
 
     display.drawLine(35, 24, 45, 24, SSD1306_WHITE);
     display.drawLine(83, 24, 93, 24, SSD1306_WHITE);
 
-    display.display();
+    finishFrame();
+    currentFace = Face::Sleep;
 }
