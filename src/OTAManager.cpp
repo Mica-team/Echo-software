@@ -8,8 +8,8 @@
 #include <ArduinoJson.h>
 #include <mbedtls/sha256.h>
 
-#define CURRENT_VERSION "1.0.0"
-#define CURRENT_BUILD 1
+#define CURRENT_VERSION "1.0.1"
+#define CURRENT_BUILD 2
 
 static const char* VERSION_URL =
     "https://raw.githubusercontent.com/Mica-team/Echo-software/main/echo-update/version.json";
@@ -24,6 +24,10 @@ static unsigned long lastWiFiAttempt = 0;
 static unsigned long lastOTACheck = 0;
 static bool updateInProgress = false;
 static bool updateFound = false;
+static bool wifiRequested = false;
+static bool wifiSessionActive = false;
+static bool otaSession = false;
+static bool otaCheckRequested = false;
 
 static Preferences preferences;
 
@@ -79,6 +83,31 @@ static void handleBluetoothWiFiCommand()
         lastWiFiAttempt = 0;
         command = "";
     }
+    else if (command == "WIFI_CONNECT")
+    {
+        wifiRequested = true;
+        lastWiFiAttempt = 0;
+        command = "";
+    }
+    else if (command == "WIFI_DISCONNECT")
+    {
+        wifiRequested = false;
+        otaCheckRequested = false;
+        wifiSessionActive = false;
+        otaSession = false;
+        WiFi.disconnect(true, true);
+        Serial.println("OTA: Wi-Fi disconnected by app");
+        command = "";
+    }
+    else if (command == "OTA_CHECK")
+    {
+        wifiRequested = true;
+        otaSession = true;
+        otaCheckRequested = true;
+        lastWiFiAttempt = 0;
+        lastOTACheck = millis() - OTA_CHECK_INTERVAL;
+        command = "";
+    }
     else if (command == "WIFI_CLEAR")
     {
         preferences.begin("echo-ota", false);
@@ -87,6 +116,10 @@ static void handleBluetoothWiFiCommand()
 
         wifiSSID = "";
         wifiPassword = "";
+        wifiRequested = false;
+        otaCheckRequested = false;
+        wifiSessionActive = false;
+        otaSession = false;
         WiFi.disconnect(true, true);
         Serial.println("OTA: Wi-Fi credentials cleared");
         command = "";
@@ -95,11 +128,15 @@ static void handleBluetoothWiFiCommand()
 
 static void connectWiFi()
 {
-    if (wifiSSID.length() == 0)
+    if (!wifiRequested || wifiSSID.length() == 0)
         return;
 
     if (WiFi.status() == WL_CONNECTED)
+    {
+        wifiRequested = false;
+        wifiSessionActive = true;
         return;
+    }
 
     if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL)
         return;
@@ -266,13 +303,14 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
 
 static void checkForUpdate()
 {
-    if (updateInProgress || WiFi.status() != WL_CONNECTED)
+    if (!otaCheckRequested || updateInProgress || WiFi.status() != WL_CONNECTED)
         return;
 
     if (millis() - lastOTACheck < OTA_CHECK_INTERVAL)
         return;
 
     lastOTACheck = millis();
+    otaCheckRequested = false;
 
     HTTPClient http;
 
@@ -363,7 +401,6 @@ void otaSetup()
         Serial.println("OTA Ready");
     }
 
-    connectWiFi();
 }
 
 void otaLoop()
@@ -371,4 +408,12 @@ void otaLoop()
     handleBluetoothWiFiCommand();
     connectWiFi();
     checkForUpdate();
+
+    if (!otaCheckRequested && otaSession && wifiSessionActive && WiFi.status() == WL_CONNECTED)
+    {
+        wifiSessionActive = false;
+        otaSession = false;
+        WiFi.disconnect(true, true);
+        Serial.println("OTA: Wi-Fi disconnected after OTA check");
+    }
 }
