@@ -97,7 +97,7 @@ static void sendStatsReport()
         SerialBT.hasClient() ? "CONNECTED" : "WAITING";
 
     SerialBT.printf(
-        "STATS:TEMP=%.2f;CPU=%lu;HEAP=%lu;BT=%s\\n",
+        "STATS:TEMP=%.2f;CPU=%lu;HEAP=%lu;BT=%s\n",
         temperature,
         cpuMHz,
         freeHeap,
@@ -105,7 +105,7 @@ static void sendStatsReport()
     );
 
     Serial.printf(
-        "STATS: TEMP=%.2f C | CPU=%lu MHz | HEAP=%lu | BT=%s\\n",
+        "STATS: TEMP=%.2f C | CPU=%lu MHz | HEAP=%lu | BT=%s\n",
         temperature,
         cpuMHz,
         freeHeap,
