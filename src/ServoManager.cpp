@@ -19,6 +19,11 @@ void servoSetup()
     head.write(SERVO_CENTER);
 }
 
+void servoStop()
+{
+    head.detach();
+}
+
 void servoCenter()
 {
     head.write(SERVO_CENTER);
