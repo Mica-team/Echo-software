@@ -5,5 +5,6 @@ void faceSetup();
 void happyFace();
 void idleFace();
 void sleepFace();
+void thermalFace();
 
 #endif
