@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>
 #include <esp_sleep.h>
 
 #include "FaceManager.h"
@@ -18,9 +19,56 @@ constexpr float THERMAL_RECOVERY_C = 65.0f;
 constexpr uint32_t TEMP_CHECK_INTERVAL_MS = 1000;
 constexpr uint32_t CRITICAL_SLEEP_US = 60ULL * 1000000ULL;
 
+constexpr uint8_t POWER_CYCLE_OVERRIDE_COUNT = 3;
+constexpr char THERMAL_NVS_NAMESPACE[] = "thermal";
+constexpr char THERMAL_LATCH_KEY[] = "shutdown";
+constexpr char THERMAL_CYCLES_KEY[] = "cycles";
+
 unsigned long lastThermalCheck = 0;
 bool throttled = false;
 bool emergency = false;
+bool overrideBoot = false;
+
+Preferences thermalPrefs;
+
+void prepareThermalPowerCycleState()
+{
+    thermalPrefs.begin(THERMAL_NVS_NAMESPACE, false);
+
+    const bool shutdownLatched =
+        thermalPrefs.getBool(THERMAL_LATCH_KEY, false);
+
+    if (!shutdownLatched)
+        return;
+
+    uint8_t cycles = thermalPrefs.getUChar(THERMAL_CYCLES_KEY, 0);
+
+    if (cycles < POWER_CYCLE_OVERRIDE_COUNT)
+        ++cycles;
+
+    if (cycles >= POWER_CYCLE_OVERRIDE_COUNT)
+    {
+        // Three power-on boots while the thermal latch is active clears the
+        // persistent latch and allows the firmware to start normally.
+        thermalPrefs.putBool(THERMAL_LATCH_KEY, false);
+        thermalPrefs.putUChar(THERMAL_CYCLES_KEY, 0);
+        overrideBoot = true;
+
+        Serial.println(
+            "THERMAL: 3 power cycles detected - shutdown override cleared"
+        );
+    }
+    else
+    {
+        thermalPrefs.putUChar(THERMAL_CYCLES_KEY, cycles);
+
+        Serial.printf(
+            "THERMAL: shutdown latch active | power cycle %u/%u\n",
+            cycles,
+            POWER_CYCLE_OVERRIDE_COUNT
+        );
+    }
+}
 
 void enterThermalThrottle(float temperature)
 {
@@ -50,7 +98,15 @@ void enterCriticalShutdown(float temperature)
     if (emergency)
         return;
 
+    // If the user has explicitly completed three power cycles, the latch has
+    // already been cleared. Do not create a new persistent shutdown latch
+    // until a fresh critical event occurs.
     emergency = true;
+
+    thermalPrefs.putBool(THERMAL_LATCH_KEY, true);
+
+    // A fresh critical event starts a new three-cycle sequence.
+    thermalPrefs.putUChar(THERMAL_CYCLES_KEY, 0);
 
     Serial.printf(
         "THERMAL: CRITICAL %.2f C - shutting down for 60 seconds\n",
@@ -70,6 +126,8 @@ void enterCriticalShutdown(float temperature)
     // Their thermal-safe stop/siren hooks should be connected when audio
     // hardware support is added.
 
+    thermalPrefs.end();
+
     delay(50);
     esp_sleep_enable_timer_wakeup(CRITICAL_SLEEP_US);
     esp_deep_sleep_start();
@@ -79,9 +137,14 @@ void enterCriticalShutdown(float temperature)
 
 void thermalSetup()
 {
+    prepareThermalPowerCycleState();
+
     lastThermalCheck = millis();
-    Serial.printf("THERMAL: protection ready | critical=%.1f C\n",
-                  THERMAL_CRITICAL_C);
+    Serial.printf(
+        "THERMAL: protection ready | critical=%.1f C | power-cycle override=%s\n",
+        THERMAL_CRITICAL_C,
+        overrideBoot ? "ACTIVE" : "READY"
+    );
 }
 
 bool thermalLoop()
@@ -97,6 +160,8 @@ bool thermalLoop()
 
     if (temperature >= THERMAL_CRITICAL_C)
     {
+        // The three-cycle override is intentionally temporary. If the ESP32
+        // is still critically hot, protection wins and a new latch is set.
         enterCriticalShutdown(temperature);
         return true;
     }
@@ -116,9 +181,11 @@ bool thermalLoop()
     {
         setCpuFrequencyMhz(240);
         throttled = false;
-        Serial.printf("THERMAL: recovered %.2f C | CPU=%u MHz\n",
-                      temperature,
-                      getCpuFrequencyMhz());
+        Serial.printf(
+            "THERMAL: recovered %.2f C | CPU=%u MHz\n",
+            temperature,
+            getCpuFrequencyMhz()
+        );
     }
 
     return false;
