@@ -144,6 +144,7 @@ static void connectWiFi()
 
     Serial.println("OTA: Connecting Wi-Fi...");
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(true);
     WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
 }
 
