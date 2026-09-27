@@ -2,39 +2,49 @@
 #include <BluetoothSerial.h>
 #include "BluetoothManager.h"
 
-// ============================================================
-// Firmware version
 // Keep these numbers synchronized with OTA version.json.
-// ============================================================
 #define FIRMWARE_VERSION "1.0.1"
 #define FIRMWARE_BUILD 2
 
 BluetoothSerial SerialBT;
-String command = "";
+String command;
 
 static unsigned long lastTemperatureReport = 0;
-static const unsigned long TEMPERATURE_INTERVAL = 30000UL;
+static constexpr unsigned long TEMPERATURE_INTERVAL = 30000UL;
 static String echoBluetoothName;
+
+// Fixed receive buffer avoids repeated String concatenation while a
+// Bluetooth command is arriving.
+static char rxBuffer[129];
+static size_t rxLength = 0;
 
 static String buildEchoBluetoothName()
 {
-    const uint32_t uniqueId = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
+    const uint32_t uniqueId =
+        static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
+
     char suffix[7];
-    snprintf(suffix, sizeof(suffix), "%06lX", static_cast<unsigned long>(uniqueId));
-    return String("Echo-") + String(suffix);
+    snprintf(
+        suffix,
+        sizeof(suffix),
+        "%06lX",
+        static_cast<unsigned long>(uniqueId)
+    );
+
+    return String("Echo-") + suffix;
 }
 
 void bluetoothSetup()
 {
-    delay(2000);
-
     echoBluetoothName = buildEchoBluetoothName();
 
     if (!SerialBT.begin(echoBluetoothName.c_str()))
     {
         Serial.println("Bluetooth FAILED!");
         while (true)
+        {
             delay(1000);
+        }
     }
 
     Serial.println("Bluetooth READY");
@@ -50,16 +60,12 @@ void bluetoothSetup()
     lastTemperatureReport = millis();
 }
 
-// ============================================================
-// Identify this device to the Echo Android app.
-// The app must verify this response after connecting before it
-// treats the Bluetooth connection as an Echo connection.
-// ============================================================
 static void sendIdentityReport()
 {
-    const uint32_t uniqueId = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
+    const uint32_t uniqueId =
+        static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
 
-    char identity[64];
+    char identity[32];
     snprintf(
         identity,
         sizeof(identity),
@@ -68,24 +74,12 @@ static void sendIdentityReport()
     );
 
     SerialBT.print(identity);
-    Serial.print("Identity: ");
-    Serial.print(identity);
 }
 
-// ============================================================
-// Send real firmware version/build
-// ============================================================
 static void sendVersionReport()
 {
-    SerialBT.printf(
-        "VERSION:%s\n",
-        FIRMWARE_VERSION
-    );
-
-    SerialBT.printf(
-        "BUILD:%d\n",
-        FIRMWARE_BUILD
-    );
+    SerialBT.printf("VERSION:%s\n", FIRMWARE_VERSION);
+    SerialBT.printf("BUILD:%d\n", FIRMWARE_BUILD);
 
     Serial.printf(
         "VERSION: %s | BUILD: %d\n",
@@ -94,9 +88,6 @@ static void sendVersionReport()
     );
 }
 
-// ============================================================
-// Temperature + diagnostic telemetry
-// ============================================================
 static void sendTemperatureReport()
 {
     const float temperature = temperatureRead();
@@ -105,11 +96,7 @@ static void sendTemperatureReport()
     const char* btStatus =
         SerialBT.hasClient() ? "CONNECTED" : "WAITING";
 
-    SerialBT.printf(
-        "TEMP:%.2f\n",
-        temperature
-    );
-
+    SerialBT.printf("TEMP:%.2f\n", temperature);
     SerialBT.printf(
         "INFO:TEMP=%.2f;CPU=%lu;HEAP=%lu;BT=%s\n",
         temperature,
@@ -127,67 +114,61 @@ static void sendTemperatureReport()
     );
 }
 
+static void submitCommand()
+{
+    if (rxLength == 0)
+        return;
+
+    rxBuffer[rxLength] = '\0';
+    command = rxBuffer;
+    command.trim();
+    rxLength = 0;
+
+    if (command.length() > 0)
+    {
+        Serial.print("Bluetooth command: ");
+        Serial.println(command);
+    }
+}
+
 void bluetoothLoop()
 {
-    // --------------------------------------------------------
-    // Non-blocking Bluetooth command reader
-    // --------------------------------------------------------
     while (SerialBT.available())
     {
-        const char c =
-            static_cast<char>(SerialBT.read());
+        const char c = static_cast<char>(SerialBT.read());
 
         if (c == '\n' || c == '\r')
         {
-            if (command.length() > 0)
-            {
-                command.trim();
+            submitCommand();
+            continue;
+        }
 
-                Serial.print(
-                    "Bluetooth command: "
-                );
-                Serial.println(command);
-            }
+        if (rxLength < sizeof(rxBuffer) - 1)
+        {
+            rxBuffer[rxLength++] = c;
         }
         else
         {
-            command += c;
-
-            // Prevent malformed input from filling RAM.
-            if (command.length() > 128)
-            {
-                command = "";
-            }
+            // Drop an over-sized malformed command instead of
+            // allowing unbounded memory growth.
+            rxLength = 0;
         }
     }
 
-    // --------------------------------------------------------
-    // Handle identity handshake immediately
-    // --------------------------------------------------------
     if (command == "IDENTIFY")
     {
         sendIdentityReport();
         command = "";
     }
-
-    // --------------------------------------------------------
-    // Handle VERSION command immediately
-    // --------------------------------------------------------
-    if (command == "VERSION")
+    else if (command == "VERSION")
     {
         sendVersionReport();
         command = "";
     }
 
-    // --------------------------------------------------------
-    // Temperature every 30 seconds
-    // --------------------------------------------------------
     const unsigned long now = millis();
 
-    if (
-        now - lastTemperatureReport >=
-        TEMPERATURE_INTERVAL
-    )
+    if (now - lastTemperatureReport >= TEMPERATURE_INTERVAL)
     {
         lastTemperatureReport = now;
 
@@ -198,8 +179,7 @@ void bluetoothLoop()
         else
         {
             Serial.printf(
-                "Bluetooth not connected | "
-                "CPU: %lu MHz | HEAP: %lu\n",
+                "Bluetooth not connected | CPU: %lu MHz | HEAP: %lu\n",
                 getCpuFrequencyMhz(),
                 ESP.getFreeHeap()
             );
