@@ -4,6 +4,7 @@
 #include "ServoManager.h"
 #include "FaceManager.h"
 #include "OTAManager.h"
+#include "ThermalManager.h"
 
 void setup()
 {
@@ -13,15 +14,22 @@ void setup()
     servoSetup();
     faceSetup();
     otaSetup();
+    thermalSetup();
 }
 
 void loop()
 {
+    // Thermal protection runs first so communication and hardware commands
+    // cannot keep operating normally while the ESP32 is overheating.
+    if (thermalLoop())
+        return;
+
+    if (thermalEmergencyActive())
+        return;
+
     bluetoothLoop();
     otaLoop();
 
-    // Execute hardware commands only after the communication
-    // managers have had a chance to consume their commands.
     if (command == "LEFT")
     {
         servoLeft();
@@ -48,8 +56,6 @@ void loop()
     }
     else
     {
-        // Commands handled by Bluetooth/OTA managers are already
-        // cleared there. Unknown commands are discarded here.
         command = "";
         delay(1);
         return;
