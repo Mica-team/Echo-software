@@ -382,6 +382,18 @@ static void checkForUpdate()
     updateInProgress = false;
 }
 
+void otaThermalShutdown()
+{
+    wifiRequested = false;
+    otaCheckRequested = false;
+    wifiSessionActive = false;
+    otaSession = false;
+    updateInProgress = false;
+    WiFi.disconnect(true, true);
+    WiFi.mode(WIFI_OFF);
+    Serial.println("OTA: disabled by thermal protection");
+}
+
 void otaSetup()
 {
     loadWiFiCredentials();
