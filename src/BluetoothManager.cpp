@@ -88,6 +88,31 @@ static void sendVersionReport()
     );
 }
 
+static void sendStatsReport()
+{
+    const float temperature = temperatureRead();
+    const unsigned long freeHeap = ESP.getFreeHeap();
+    const unsigned long cpuMHz = getCpuFrequencyMhz();
+    const char* btStatus =
+        SerialBT.hasClient() ? "CONNECTED" : "WAITING";
+
+    SerialBT.printf(
+        "STATS:TEMP=%.2f;CPU=%lu;HEAP=%lu;BT=%s\\n",
+        temperature,
+        cpuMHz,
+        freeHeap,
+        btStatus
+    );
+
+    Serial.printf(
+        "STATS: TEMP=%.2f C | CPU=%lu MHz | HEAP=%lu | BT=%s\\n",
+        temperature,
+        cpuMHz,
+        freeHeap,
+        btStatus
+    );
+}
+
 static void sendTemperatureReport()
 {
     const float temperature = temperatureRead();
@@ -163,6 +188,11 @@ void bluetoothLoop()
     else if (command == "VERSION")
     {
         sendVersionReport();
+        command = "";
+    }
+    else if (command == "STATS")
+    {
+        sendStatsReport();
         command = "";
     }
 
