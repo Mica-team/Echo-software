@@ -23,7 +23,6 @@ static const unsigned long OTA_CHECK_INTERVAL = 300000UL;
 static unsigned long lastWiFiAttempt = 0;
 static unsigned long lastOTACheck = 0;
 static bool updateInProgress = false;
-static bool updateFound = false;
 static bool wifiRequested = false;
 static bool wifiSessionActive = false;
 static bool otaSession = false;
@@ -201,7 +200,7 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
     }
 
     WiFiClient* stream = http.getStreamPtr();
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     size_t written = 0;
 
     mbedtls_sha256_context sha;
@@ -274,10 +273,7 @@ static bool downloadAndFlash(const String& firmwareFile, const String& expectedS
         sprintf(actualSHA + (i * 2), "%02x", digest[i]);
     actualSHA[64] = '\0';
 
-    String expected = expectedSHA;
-    expected.toLowerCase();
-
-    if (expected != String(actualSHA))
+    if (strcasecmp(expectedSHA.c_str(), actualSHA) != 0)
     {
         Serial.println("OTA: SHA-256 verification FAILED");
         Update.abort();
@@ -371,8 +367,6 @@ static void checkForUpdate()
     Serial.printf("OTA: New firmware %s available\n", latestVersion);
 
     updateInProgress = true;
-    updateFound = true;
-
     if (downloadAndFlash(String(firmwareFile), String(expectedSHA)))
     {
         Serial.println("OTA: Update complete. Restarting...");
