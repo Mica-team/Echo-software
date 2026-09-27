@@ -5,5 +5,6 @@ void servoSetup();
 void servoCenter();
 void servoLeft();
 void servoRight();
+void servoStop();
 
 #endif
