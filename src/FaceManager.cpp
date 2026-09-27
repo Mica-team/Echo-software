@@ -4,12 +4,16 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
+namespace
+{
+constexpr int SCREEN_WIDTH = 128;
+constexpr int SCREEN_HEIGHT = 64;
 
-#define OLED_DC 2
-#define OLED_RST 4
-#define OLED_CS -1
+constexpr int OLED_DC = 2;
+constexpr int OLED_RST = 4;
+constexpr int OLED_CS = -1;
+constexpr uint32_t OLED_SPI_FREQUENCY = 4000000;
+}
 
 Adafruit_SSD1306 display(
     SCREEN_WIDTH,
@@ -23,17 +27,19 @@ Adafruit_SSD1306 display(
 void faceSetup()
 {
     SPI.begin(18, -1, 23, -1);
-    SPI.setFrequency(1000000);   // 1 MHz
+    SPI.setFrequency(OLED_SPI_FREQUENCY);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC))
     {
         Serial.println("OLED FAILED");
-        while (true);
+        while (true)
+        {
+            delay(1000);
+        }
     }
 
     display.clearDisplay();
     display.display();
-    delay(200);
 
     idleFace();
 }
@@ -41,16 +47,10 @@ void faceSetup()
 void happyFace()
 {
     display.clearDisplay();
-    display.display();
-delay(5);
 
-display.clearDisplay();
-
-    // Eyes
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
     display.fillCircle(88, 24, 6, SSD1306_WHITE);
 
-    // Smile
     display.drawCircle(64, 40, 16, SSD1306_WHITE);
     display.fillRect(48, 24, 32, 16, SSD1306_BLACK);
 
@@ -60,10 +60,6 @@ display.clearDisplay();
 void idleFace()
 {
     display.clearDisplay();
-    display.display();
-delay(5);
-
-display.clearDisplay();
 
     display.fillCircle(40, 24, 6, SSD1306_WHITE);
     display.fillCircle(88, 24, 6, SSD1306_WHITE);
@@ -74,10 +70,6 @@ display.clearDisplay();
 void sleepFace()
 {
     display.clearDisplay();
-    display.display();
-delay(5);
-
-display.clearDisplay();
 
     display.drawLine(35, 24, 45, 24, SSD1306_WHITE);
     display.drawLine(83, 24, 93, 24, SSD1306_WHITE);
