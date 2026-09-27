@@ -76,3 +76,11 @@ void sleepFace()
 
     display.display();
 }
+
+void thermalFace()
+{
+    // SSD1306 is monochrome, so this renders a full-screen emergency field.
+    display.clearDisplay();
+    display.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
+    display.display();
+}
