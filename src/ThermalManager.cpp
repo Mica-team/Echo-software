@@ -6,6 +6,7 @@
 
 #include "FaceManager.h"
 #include "ServoManager.h"
+#include "OTAManager.h"
 
 namespace
 {
@@ -32,7 +33,7 @@ void enterThermalThrottle(float temperature)
     setCpuFrequencyMhz(80);
 
     // Wi-Fi is a major heat/power source and OTA is not safe while hot.
-    WiFi.disconnect(true, true);
+    otaThermalShutdown();
     WiFi.mode(WIFI_OFF);
 
     servoStop();
@@ -62,9 +63,8 @@ void enterCriticalShutdown(float temperature)
     // Stop hardware that can add heat.
     servoStop();
 
-    // Disable Wi-Fi before deep sleep.
-    WiFi.disconnect(true, true);
-    WiFi.mode(WIFI_OFF);
+    // Disable Wi-Fi and prevent OTA from reconnecting.
+    otaThermalShutdown();
 
     // NOTE: microphone/speaker drivers are not present in this firmware yet.
     // Their thermal-safe stop/siren hooks should be connected when audio
