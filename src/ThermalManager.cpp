@@ -11,7 +11,7 @@
 namespace
 {
 constexpr float THERMAL_WARNING_C = 70.0f;
-constexpr float THERMAL_THROTTLE_C = 75.0f;
+constexpr float THERMAL_THROTTLE_C = 80.0f;
 constexpr float THERMAL_CRITICAL_C = 85.0f;
 constexpr float THERMAL_RECOVERY_C = 65.0f;
 
