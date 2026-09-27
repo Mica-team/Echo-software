@@ -10,7 +10,6 @@ void setup()
     Serial.begin(115200);
 
     bluetoothSetup();
-    delay(500);
     servoSetup();
     faceSetup();
     otaSetup();
@@ -21,36 +20,41 @@ void loop()
     bluetoothLoop();
     otaLoop();
 
+    // Execute hardware commands only after the communication
+    // managers have had a chance to consume their commands.
     if (command == "LEFT")
     {
         servoLeft();
-        command = "";
     }
     else if (command == "RIGHT")
     {
         servoRight();
-        command = "";
     }
     else if (command == "CENTER")
     {
         servoCenter();
-        command = "";
     }
     else if (command == "HAPPY")
     {
         happyFace();
-        command = "";
     }
     else if (command == "IDLE")
     {
         idleFace();
-        command = "";
     }
     else if (command == "SLEEP")
     {
         sleepFace();
+    }
+    else
+    {
+        // Commands handled by Bluetooth/OTA managers are already
+        // cleared there. Unknown commands are discarded here.
         command = "";
+        delay(1);
+        return;
     }
 
-    delay(20);
+    command = "";
+    delay(1);
 }
