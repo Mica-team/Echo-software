@@ -2,3 +2,5 @@
 
 void otaSetup();
 void otaLoop();
+void otaThermalShutdown();
+
