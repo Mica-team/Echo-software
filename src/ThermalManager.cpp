@@ -11,7 +11,7 @@
 
 namespace
 {
-constexpr float THERMAL_WARNING_C = 70.0f;
+constexpr float THERMAL_WARNING_C = 76.0f;
 constexpr float THERMAL_THROTTLE_C = 80.0f;
 constexpr float THERMAL_CRITICAL_C = 85.0f;
 constexpr float THERMAL_RECOVERY_C = 65.0f;
@@ -48,8 +48,6 @@ void prepareThermalPowerCycleState()
 
     if (cycles >= POWER_CYCLE_OVERRIDE_COUNT)
     {
-        // Three power-on boots while the thermal latch is active clears the
-        // persistent latch and allows the firmware to start normally.
         thermalPrefs.putBool(THERMAL_LATCH_KEY, false);
         thermalPrefs.putUChar(THERMAL_CYCLES_KEY, 0);
         overrideBoot = true;
@@ -77,10 +75,8 @@ void enterThermalThrottle(float temperature)
 
     throttled = true;
 
-    // Reduce CPU frequency to the lowest normal ESP32 setting.
     setCpuFrequencyMhz(80);
 
-    // Wi-Fi is a major heat/power source and OTA is not safe while hot.
     otaThermalShutdown();
     WiFi.mode(WIFI_OFF);
 
@@ -98,14 +94,9 @@ void enterCriticalShutdown(float temperature)
     if (emergency)
         return;
 
-    // If the user has explicitly completed three power cycles, the latch has
-    // already been cleared. Do not create a new persistent shutdown latch
-    // until a fresh critical event occurs.
     emergency = true;
 
     thermalPrefs.putBool(THERMAL_LATCH_KEY, true);
-
-    // A fresh critical event starts a new three-cycle sequence.
     thermalPrefs.putUChar(THERMAL_CYCLES_KEY, 0);
 
     Serial.printf(
@@ -113,13 +104,8 @@ void enterCriticalShutdown(float temperature)
         temperature
     );
 
-    // Put the OLED into its emergency state before sleeping.
     thermalFace();
-
-    // Stop hardware that can add heat.
     servoStop();
-
-    // Disable Wi-Fi and prevent OTA from reconnecting.
     otaThermalShutdown();
 
     // NOTE: microphone/speaker drivers are not present in this firmware yet.
@@ -141,7 +127,9 @@ void thermalSetup()
 
     lastThermalCheck = millis();
     Serial.printf(
-        "THERMAL: protection ready | critical=%.1f C | power-cycle override=%s\n",
+        "THERMAL: protection ready | warning=%.1f C | throttle=%.1f C | critical=%.1f C | power-cycle override=%s\n",
+        THERMAL_WARNING_C,
+        THERMAL_THROTTLE_C,
         THERMAL_CRITICAL_C,
         overrideBoot ? "ACTIVE" : "READY"
     );
@@ -160,8 +148,6 @@ bool thermalLoop()
 
     if (temperature >= THERMAL_CRITICAL_C)
     {
-        // The three-cycle override is intentionally temporary. If the ESP32
-        // is still critically hot, protection wins and a new latch is set.
         enterCriticalShutdown(temperature);
         return true;
     }
