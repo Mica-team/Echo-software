@@ -1,5 +1,6 @@
 #include "echo_oled.h"
 #include <string.h>
+#include <stdbool.h>
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
