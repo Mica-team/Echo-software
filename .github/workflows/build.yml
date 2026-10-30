@@ -1,25 +1,28 @@
-name: Build ESP32
+name: Build ESP-IDF firmware
 
 on:
   push:
-    branches: [ main ]
+    branches: [esp-idf-rewrite]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build PlatformIO
-        uses: karniv00l/platformio-run-action@v1
-
-      - name: Upload Firmware
+      - name: Build for ESP32
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.2
+          target: esp32
+          command: idf.py build
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Echo-Firmware
+          name: echo-esp-idf-build
           path: |
-            .pio/build/esp32dev/firmware.bin
-            .pio/build/esp32dev/bootloader.bin
-            .pio/build/esp32dev/partitions.bin
+            build/echo_firmware.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
